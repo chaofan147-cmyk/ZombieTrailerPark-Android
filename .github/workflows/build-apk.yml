@@ -92,36 +92,42 @@ jobs:
         shell: python
         run: |
           from pathlib import Path
+          import re
           p = Path("ruffle-android/app/src/main/java/rs/ruffle/MainActivity.kt")
           s = p.read_text(encoding="utf-8")
+          if "openBundledGame()" in s:
+              print("MainActivity already patched; skipping")
+              raise SystemExit(0)
+
           s = s.replace(
               "import android.net.Uri\n",
-              "import android.net.Uri\nimport android.widget.Toast\nimport java.io.File\nimport java.io.FileOutputStream\n"
+              "import android.net.Uri\nimport android.widget.Toast\nimport java.io.File\nimport java.io.FileOutputStream\n",
+              1
           )
-          old = """        setContent {
-                      RuffleTheme {
-                          RuffleNavHost(openSwf = { openSwf(it) })
-                      }
-                  }
-                    """
-          new = old + "        openBundledGame()\n"
-          if old not in s:
-              raise SystemExit("MainActivity insertion point not found")
-          s = s.replace(old, new, 1)
+
+          pattern = re.compile(
+              r'(\n\s*setContent\s*\{\s*\n\s*RuffleTheme\s*\{\s*\n\s*RuffleNavHost\(openSwf = \{ openSwf\(it\) \}\)\s*\n\s*\}\s*\n\s*\})',
+              re.MULTILINE
+          )
+          m = pattern.search(s)
+          if not m:
+              raise SystemExit("MainActivity setContent block not found")
+          s = s[:m.end()] + "\n        openBundledGame()" + s[m.end():]
+
           marker = "    private fun openSwf(uri: Uri) {\n"
-          method = """    private fun openBundledGame() {
-                  try {
-                      val target = File(cacheDir, "zombie-trailer-park.swf")
-                      assets.open("demos/zombie-trailer-park.swf").use { input ->
-                          FileOutputStream(target).use { output -> input.copyTo(output) }
-                      }
-                      openSwf(Uri.fromFile(target))
-                  } catch (e: Exception) {
-                      Toast.makeText(this, "无法加载游戏: ${e.message}", Toast.LENGTH_LONG).show()
-                  }
-              }
-          
-                    """
+          method = (
+              "    private fun openBundledGame() {\n"
+              "        try {\n"
+              "            val target = File(cacheDir, \"zombie-trailer-park.swf\")\n"
+              "            assets.open(\"demos/zombie-trailer-park.swf\").use { input ->\n"
+              "                FileOutputStream(target).use { output -> input.copyTo(output) }\n"
+              "            }\n"
+              "            openSwf(Uri.fromFile(target))\n"
+              "        } catch (e: Exception) {\n"
+              "            Toast.makeText(this, \"无法加载游戏: ${e.message}\", Toast.LENGTH_LONG).show()\n"
+              "        }\n"
+              "    }\n\n"
+          )
           if marker not in s:
               raise SystemExit("MainActivity marker not found")
           s = s.replace(marker, method + marker, 1)
