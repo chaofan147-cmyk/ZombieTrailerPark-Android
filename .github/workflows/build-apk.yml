@@ -45,10 +45,15 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install Rust Android target
+      - name: Install Rust Android target for Ruffle toolchain
+        working-directory: ruffle-android
         run: |
+          echo "Active Rust toolchain:"
+          rustup show active-toolchain
           rustup target add aarch64-linux-android
+          echo "Installed Rust targets:"
           rustup target list --installed
+          rustc --print target-libdir --target aarch64-linux-android
 
       - name: Set up Android NDK
         uses: nttld/setup-ndk@v1
