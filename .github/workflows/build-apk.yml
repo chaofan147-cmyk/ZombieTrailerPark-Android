@@ -89,6 +89,37 @@ jobs:
           cp original/zombie-trailer-park.swf \
             ruffle-android/app/src/main/assets/demos/zombie-trailer-park.swf
 
+      - name: Make game content fit the player window
+        shell: python
+        run: |
+          from pathlib import Path
+          import zlib
+
+          p = Path("ruffle-android/app/src/main/assets/demos/zombie-trailer-park.swf")
+          raw = p.read_bytes()
+          signature = raw[:3]
+
+          if signature == b"FWS":
+              header = raw[:8]
+              body = raw[8:]
+              compress = False
+          elif signature == b"CWS":
+              header = raw[:8]
+              body = zlib.decompress(raw[8:])
+              compress = True
+          else:
+              raise SystemExit(f"Unsupported SWF compression: {signature!r}")
+
+          old = b"NO_SCALE"
+          new = b"SHOW_ALL"
+          matches = body.count(old)
+          if matches != 1:
+              raise SystemExit(f"Expected one NO_SCALE directive, found {matches}")
+
+          body = body.replace(old, new, 1)
+          p.write_bytes(header + (zlib.compress(body) if compress else body))
+          print("Changed the game stage scale mode from NO_SCALE to SHOW_ALL")
+
       - name: Patch Ruffle launcher
         shell: python
         run: |
@@ -190,7 +221,9 @@ jobs:
 
           s = s.replace(
               content_view_marker,
-              content_view_marker + "\n        layout.setBackgroundColor(android.graphics.Color.BLACK)",
+              content_view_marker + "\n        layout.setBackgroundColor(android.graphics.Color.BLACK)"
+              + "\n        layout.findViewById<View>(R.id.button_kb).visibility = View.GONE"
+              + "\n        layout.findViewById<View>(R.id.button_cm).visibility = View.GONE",
               1,
           )
 
