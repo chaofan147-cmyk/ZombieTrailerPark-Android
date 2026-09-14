@@ -147,49 +147,83 @@ jobs:
           p = Path("ruffle-android/app/src/main/java/rs/ruffle/PlayerActivity.kt")
           s = p.read_text(encoding="utf-8")
 
-          if "import java.io.File\n" not in s:
-              s = s.replace(
-                  "import java.io.DataInputStream\n",
-                  "import java.io.DataInputStream\nimport java.io.File\n",
-                  1,
-              )
-
           old = """            if (uri?.scheme == "content") {
-                            try {
-                                contentResolver.openInputStream(uri).use { inputStream ->
-                                    if (inputStream == null) {
-                                        return null
-                                    }
-                                    val bytes = ByteArray(inputStream.available())
-                                    val dataInputStream = DataInputStream(inputStream)
-                                    dataInputStream.readFully(bytes)
-                                    return bytes
-                                }
-                            } catch (ignored: IOException) {
-                            }
+                try {
+                    contentResolver.openInputStream(uri).use { inputStream ->
+                        if (inputStream == null) {
+                            return null
                         }
-                      """
+                        val bytes = ByteArray(inputStream.available())
+                        val dataInputStream = DataInputStream(inputStream)
+                        dataInputStream.readFully(bytes)
+                        return bytes
+                    }
+                } catch (ignored: IOException) {
+                }
+            }
+          """
 
           new = """            if (uri?.scheme == "content" || uri?.scheme == "file") {
-                  try {
-                      val inputStream = if (uri.scheme == "file") {
-                          File(uri.path ?: return null).inputStream()
-                      } else {
-                          contentResolver.openInputStream(uri) ?: return null
-                      }
-                      inputStream.use { stream ->
-                          val bytes = ByteArray(stream.available())
-                          val dataInputStream = DataInputStream(stream)
-                          dataInputStream.readFully(bytes)
-                          return bytes
-                      }
-                  } catch (ignored: IOException) {
-                  }
-              }
-            """
+                try {
+                    val inputStream = if (uri.scheme == "file") {
+                        File(uri.path ?: return null).inputStream()
+                    } else {
+                        contentResolver.openInputStream(uri) ?: return null
+                    }
+                    inputStream.use { stream ->
+                        val bytes = ByteArray(stream.available())
+                        val dataInputStream = DataInputStream(stream)
+                        dataInputStream.readFully(bytes)
+                        return bytes
+                    }
+                } catch (ignored: IOException) {
+                }
+            }
+          """
 
           if old not in s:
               raise SystemExit("PlayerActivity loader block not found")
+
+          s = s.replace(old, new, 1)
+          p.write_text(s, encoding="utf-8")
+
+      - name: Force full 4 by 3 game screen with black bars
+        shell: python
+        run: |
+          from pathlib import Path
+
+          p = Path("ruffle-android/app/src/main/java/rs/ruffle/PlayerActivity.kt")
+          s = p.read_text(encoding="utf-8")
+
+          old = """        setContentView(layout)
+                  mSurfaceView = InputEnabledSurfaceView(this)
+          """
+
+          new = """        setContentView(layout)
+                  layout.setBackgroundColor(android.graphics.Color.BLACK)
+                  mSurfaceView = InputEnabledSurfaceView(this)
+          """
+
+          if old not in s:
+              raise SystemExit("PlayerActivity layout setup block not found")
+
+          s = s.replace(old, new, 1)
+
+          old = """        mSurfaceView.setLayoutParams(pars)
+                  val keys = gatherAllDescendantsOfType<Button>(
+          """
+
+          new = """        // Zombie Trailer Park is 800x600 (4:3). Keep every pixel visible.
+                  pars.width = 0
+                  pars.height = 0
+                  pars.dimensionRatio = "4:3"
+                  mSurfaceView.layoutParams = pars
+
+                  val keys = gatherAllDescendantsOfType<Button>(
+          """
+
+          if old not in s:
+              raise SystemExit("PlayerActivity surface layout block not found")
 
           s = s.replace(old, new, 1)
           p.write_text(s, encoding="utf-8")
