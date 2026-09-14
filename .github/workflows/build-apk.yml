@@ -221,9 +221,7 @@ jobs:
 
           s = s.replace(
               content_view_marker,
-              content_view_marker + "\n        layout.setBackgroundColor(android.graphics.Color.BLACK)"
-              + "\n        layout.findViewById<View>(R.id.button_kb).visibility = View.GONE"
-              + "\n        layout.findViewById<View>(R.id.button_cm).visibility = View.GONE",
+              content_view_marker + "\n        layout.setBackgroundColor(android.graphics.Color.BLACK)",
               1,
           )
 
