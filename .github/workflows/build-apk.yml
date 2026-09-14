@@ -3,7 +3,7 @@ name: Build Zombie Trailer Park APK (Ruffle ARM64)
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [main]
 
 permissions:
   contents: read
@@ -16,6 +16,7 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout this project
         uses: actions/checkout@v4
@@ -40,7 +41,7 @@ jobs:
         uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: "17"
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
@@ -86,15 +87,17 @@ jobs:
         run: |
           mkdir -p ruffle-android/app/src/main/assets/demos
           cp original/zombie-trailer-park.swf \
-             ruffle-android/app/src/main/assets/demos/zombie-trailer-park.swf
+            ruffle-android/app/src/main/assets/demos/zombie-trailer-park.swf
 
       - name: Patch Ruffle launcher
         shell: python
         run: |
           from pathlib import Path
           import re
+
           p = Path("ruffle-android/app/src/main/java/rs/ruffle/MainActivity.kt")
           s = p.read_text(encoding="utf-8")
+
           if "openBundledGame()" in s:
               print("MainActivity already patched; skipping")
               raise SystemExit(0)
@@ -102,34 +105,37 @@ jobs:
           s = s.replace(
               "import android.net.Uri\n",
               "import android.net.Uri\nimport android.widget.Toast\nimport java.io.File\nimport java.io.FileOutputStream\n",
-              1
+              1,
           )
 
           pattern = re.compile(
               r'(\n\s*setContent\s*\{\s*\n\s*RuffleTheme\s*\{\s*\n\s*RuffleNavHost\(openSwf = \{ openSwf\(it\) \}\)\s*\n\s*\}\s*\n\s*\})',
-              re.MULTILINE
+              re.MULTILINE,
           )
           m = pattern.search(s)
           if not m:
               raise SystemExit("MainActivity setContent block not found")
+
           s = s[:m.end()] + "\n        openBundledGame()" + s[m.end():]
 
           marker = "    private fun openSwf(uri: Uri) {\n"
           method = (
               "    private fun openBundledGame() {\n"
               "        try {\n"
-              "            val target = File(cacheDir, \"zombie-trailer-park.swf\")\n"
-              "            assets.open(\"demos/zombie-trailer-park.swf\").use { input ->\n"
+              '            val target = File(cacheDir, "zombie-trailer-park.swf")\n'
+              '            assets.open("demos/zombie-trailer-park.swf").use { input ->\n'
               "                FileOutputStream(target).use { output -> input.copyTo(output) }\n"
               "            }\n"
               "            openSwf(Uri.fromFile(target))\n"
               "        } catch (e: Exception) {\n"
-              "            Toast.makeText(this, \"无法加载游戏: ${e.message}\", Toast.LENGTH_LONG).show()\n"
+              '            Toast.makeText(this, "无法加载游戏: ${e.message}", Toast.LENGTH_LONG).show()\n'
               "        }\n"
               "    }\n\n"
           )
+
           if marker not in s:
               raise SystemExit("MainActivity marker not found")
+
           s = s.replace(marker, method + marker, 1)
           p.write_text(s, encoding="utf-8")
 
@@ -137,42 +143,54 @@ jobs:
         shell: python
         run: |
           from pathlib import Path
+
           p = Path("ruffle-android/app/src/main/java/rs/ruffle/PlayerActivity.kt")
           s = p.read_text(encoding="utf-8")
+
+          if "import java.io.File\n" not in s:
+              s = s.replace(
+                  "import java.io.DataInputStream\n",
+                  "import java.io.DataInputStream\nimport java.io.File\n",
+                  1,
+              )
+
           old = """            if (uri?.scheme == "content") {
-                          try {
-                              contentResolver.openInputStream(uri).use { inputStream ->
-                                  if (inputStream == null) {
-                                      return null
-                                  }
-                                  val bytes = ByteArray(inputStream.available())
-                                  val dataInputStream = DataInputStream(inputStream)
-                                  dataInputStream.readFully(bytes)
-                                  return bytes
-                              }
-                          } catch (ignored: IOException) {
-                          }
-                      }
-                    """
+                            try {
+                                contentResolver.openInputStream(uri).use { inputStream ->
+                                    if (inputStream == null) {
+                                        return null
+                                    }
+                                    val bytes = ByteArray(inputStream.available())
+                                    val dataInputStream = DataInputStream(inputStream)
+                                    dataInputStream.readFully(bytes)
+                                    return bytes
+                                }
+                            } catch (ignored: IOException) {
+                            }
+                        }
+                      """
+
           new = """            if (uri?.scheme == "content" || uri?.scheme == "file") {
-                try {
-                    val inputStream = if (uri.scheme == "file") {
-                        File(uri.path ?: return null).inputStream()
-                    } else {
-                        contentResolver.openInputStream(uri) ?: return null
-                    }
-                    inputStream.use { stream ->
-                        val bytes = ByteArray(stream.available())
-                        val dataInputStream = DataInputStream(stream)
-                        dataInputStream.readFully(bytes)
-                        return bytes
-                    }
-                } catch (ignored: IOException) {
-                }
-            }
-          """
+                  try {
+                      val inputStream = if (uri.scheme == "file") {
+                          File(uri.path ?: return null).inputStream()
+                      } else {
+                          contentResolver.openInputStream(uri) ?: return null
+                      }
+                      inputStream.use { stream ->
+                          val bytes = ByteArray(stream.available())
+                          val dataInputStream = DataInputStream(stream)
+                          dataInputStream.readFully(bytes)
+                          return bytes
+                      }
+                  } catch (ignored: IOException) {
+                  }
+              }
+            """
+
           if old not in s:
               raise SystemExit("PlayerActivity loader block not found")
+
           s = s.replace(old, new, 1)
           p.write_text(s, encoding="utf-8")
 
@@ -180,15 +198,23 @@ jobs:
         shell: python
         run: |
           from pathlib import Path
+
           p = Path("ruffle-android/app/src/main/AndroidManifest.xml")
           s = p.read_text(encoding="utf-8")
           s = s.replace('android:label="@string/app_name"', 'android:label="建筑工大战僵尸"')
-          s = s.replace('android:name=".MainActivity"\n             android:launchMode',
-                        'android:name=".MainActivity"\n             android:screenOrientation="landscape"\n             android:launchMode')
-          s = s.replace('android:name=".PlayerActivity"\n             android:exported',
-                        'android:name=".PlayerActivity"\n             android:screenOrientation="landscape"\n             android:exported')
+          s = s.replace(
+              'android:name=".MainActivity"\n             android:launchMode',
+              'android:name=".MainActivity"\n             android:screenOrientation="landscape"\n             android:launchMode',
+          )
+          s = s.replace(
+              'android:name=".PlayerActivity"\n             android:exported',
+              'android:name=".PlayerActivity"\n             android:screenOrientation="landscape"\n             android:exported',
+          )
           p.write_text(s, encoding="utf-8")
-          Path("ruffle-android/local.properties").write_text("ABI_FILTERS=arm64-v8a\n", encoding="utf-8")
+          Path("ruffle-android/local.properties").write_text(
+              "ABI_FILTERS=arm64-v8a\n",
+              encoding="utf-8",
+          )
 
       - name: Restore signing keystore
         env:
@@ -197,12 +223,12 @@ jobs:
           printf '%s' "$KEYSTORE_BASE64" | base64 --decode > zombie-release.jks
           test -s zombie-release.jks
           echo "Signing keystore restored successfully"
-          
+
       - name: Build release APK
         working-directory: ruffle-android
         run: ./gradlew assembleRelease --no-daemon
 
-      - name: Sign release APK
+      - name: Sign and verify release APK
         shell: bash
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -212,26 +238,33 @@ jobs:
           set -euo pipefail
 
           APK_DIR="ruffle-android/app/build/outputs/apk/release"
-          APK="$(find "$APK_DIR" -maxdepth 1 -type f -name '*.apk' | head -n 1)"
+          APK="$(find "$APK_DIR" -maxdepth 1 -type f -name '*.apk' -print -quit)"
 
           if [ -z "$APK" ]; then
-            echo "No APK found"
+            echo "No APK found in $APK_DIR"
             exit 1
           fi
 
-          BUILD_TOOLS="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)"
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [ -z "$SDK_ROOT" ]; then
+            echo "ANDROID_HOME and ANDROID_SDK_ROOT are both unavailable"
+            exit 1
+          fi
+
+          BUILD_TOOLS="$(find "$SDK_ROOT/build-tools" -mindepth 1 -maxdepth 1 -type d -print | sort -V | tail -n 1)"
+          if [ -z "$BUILD_TOOLS" ]; then
+            echo "Android Build Tools were not found"
+            exit 1
+          fi
 
           echo "Using Build Tools: $BUILD_TOOLS"
-          echo "APK: $APK"
+          echo "Signing APK: $APK"
 
-          "$BUILD_TOOLS/zipalign" -p -f 4 \
-            "$APK" \
-            "$APK.aligned"
-
+          "$BUILD_TOOLS/zipalign" -p -f 4 "$APK" "$APK.aligned"
           mv "$APK.aligned" "$APK"
 
           "$BUILD_TOOLS/apksigner" sign \
-            --ks zombie-release.jks \
+            --ks ./zombie-release.jks \
             --ks-key-alias "$KEY_ALIAS" \
             --ks-pass env:KEYSTORE_PASSWORD \
             --key-pass env:KEY_PASSWORD \
@@ -244,19 +277,22 @@ jobs:
 
       - name: Remove signing keystore
         if: always()
-        run: |
-          rm -f zombie-release.jks
+        run: rm -f zombie-release.jks
+
       - name: Collect APK
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p exports
+
           mapfile -t apks < <(find ruffle-android/app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' | sort)
+
           if [ "${#apks[@]}" -ne 1 ]; then
             echo "Expected exactly one ARM64 APK, found ${#apks[@]}"
             printf '%s\n' "${apks[@]}"
             exit 1
           fi
+
           cp "${apks[0]}" exports/ZombieTrailerPark-Ruffle-ARM64.apk
           sha256sum exports/ZombieTrailerPark-Ruffle-ARM64.apk | tee exports/SHA256SUMS.txt
 
